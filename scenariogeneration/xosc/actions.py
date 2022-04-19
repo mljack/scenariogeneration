@@ -30,12 +30,12 @@ from .enumerations import (
     LateralDisplacement,
     SpeedTargetValueType,
     FollowMode,
-    ReferenceContext,
     VersionBase,
     LongitudinalDisplacement,
     DynamicsShapes,
     VehicleLightType,
     LightMode,
+    AutomaticGearType
 )
 from .exceptions import (
     NoActionsDefinedError,
@@ -2390,12 +2390,17 @@ class OverrideControllerValueAction(_PrivateActionType):
     def __init__(self):
         self.throttle_active = None
         self.throttle_value = convert_float(0)
+        self.throttle_rate = None
         self.brake_active = None
         self.brake_value = convert_float(0)
+        self.brake_rate = None
         self.clutch_active = None
         self.clutch_value = convert_float(0)
+        self.clutch_rate = None
         self.steeringwheel_active = None
         self.steeringwheel_value = convert_float(0)
+        self.steeringwheel_rate = None
+        self.steeringwheel_torque = None
         self.gear_active = None
         self.gear_value = convert_float(0)
         self.parkingbrake_active = None
@@ -2513,7 +2518,7 @@ class OverrideControllerValueAction(_PrivateActionType):
 
         return ocv_action
 
-    def set_clutch(self, active, value=0):
+    def set_clutch(self, active, value=0, rate=None):
         """Sets the clutch value
 
         Parameters
@@ -2522,9 +2527,13 @@ class OverrideControllerValueAction(_PrivateActionType):
 
             value (float): value of the clutch
                 Default: 0
+
+            rate (float): rate of the change
+                Default: None
         """
         self.clutch_active = active
         self.clutch_value = convert_float(value)
+        self.clutch_rate = rate
 
     def set_brake(self, active, value=0):
         """Sets the brake value
@@ -2539,7 +2548,7 @@ class OverrideControllerValueAction(_PrivateActionType):
         self.brake_active = active
         self.brake_value = convert_float(value)
 
-    def set_throttle(self, active, value=0):
+    def set_throttle(self, active, value=0, rate=None):
         """Sets the throttle value
 
         Parameters
@@ -2548,11 +2557,15 @@ class OverrideControllerValueAction(_PrivateActionType):
 
             value (float): value of the throttle
                 Default: 0
+            
+            rate (float): rate of the change (Valid from OpenSCENARIO V1.2)
+                Default: None
         """
         self.throttle_active = active
         self.throttle_value = convert_float(value)
+        self.throttle_rate = rate
 
-    def set_steeringwheel(self, active, value=0):
+    def set_steeringwheel(self, active, value=0, rate=None, torque=None):
         """Sets the steeringwheel value
 
         Parameters
@@ -2562,9 +2575,16 @@ class OverrideControllerValueAction(_PrivateActionType):
             value (float): value of the steeringwheel
                 Default: 0
 
+            rate (float): the Max Rate of the change (Valid from OpenSCENARIO V1.2)
+                Default: None
+
+            torque (float): the Max Torque of the change (Valid from OpenSCENARIO V1.2)
+                Default: None
         """
         self.steeringwheel_active = active
         self.steeringwheel_value = convert_float(value)
+        self.steeringwheel_rate = convert_float(rate)
+        self.steeringwheel_torque = convert_float(torque)
 
     def set_parkingbrake(self, active, value=0):
         """Sets the parkingbrake value
@@ -2591,7 +2611,10 @@ class OverrideControllerValueAction(_PrivateActionType):
                 Default: 0
         """
         self.gear_active = active
-        self.gear_value = convert_float(value)
+        if hasattr(AutomaticGearType, str(value)):
+            self.gear_value = value
+        else:    
+            self.gear_value = convert_float(value)
 
     def get_element(self):
         """returns the elementTree of the OverrideControllerValueAction"""
@@ -2613,13 +2636,18 @@ class OverrideControllerValueAction(_PrivateActionType):
                 "No actions were added to the OverrideControllerValueAction"
             )
         if self.throttle_active != None:
+            throttle_dict = {
+                    "active": convert_bool(self.throttle_active),
+                    "value": str(self.throttle_value),
+                }
+            if self.throttle_rate is not None and self.isVersion(minor=2):
+                throttle_dict ["maxRate"] = str(self.throttle_rate)
+            elif self.throttle_rate is not None and not self.isVersion(minor=2):
+                raise OpenSCENARIOVersionError('maxRate was introduced in OpenSCENARIO v1.2')
             ET.SubElement(
                 overrideaction,
                 "Throttle",
-                {
-                    "active": convert_bool(self.throttle_active),
-                    "value": str(self.throttle_value),
-                },
+                throttle_dict,
             )
         if self.brake_active != None:
             ET.SubElement(
@@ -2631,6 +2659,10 @@ class OverrideControllerValueAction(_PrivateActionType):
                 },
             )
         if self.clutch_active != None:
+            if self.throttle_rate is not None and self.isVersion(minor=2):
+                throttle_dict ["maxRate"] = str(self.throttle_rate)
+            elif self.throttle_rate is not None and not self.isVersion(minor=2):
+                raise OpenSCENARIOVersionError('maxRate was introduced in OpenSCENARIO v1.2')
             ET.SubElement(
                 overrideaction,
                 "Clutch",
